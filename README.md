@@ -1,6 +1,6 @@
 Ensure Python 3 is installed.
 
-Open folder in terminal and run the following:
+Open folder in terminal and run the following"
 
 python maze_creator.py
 
