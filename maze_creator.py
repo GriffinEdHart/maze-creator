@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import simpledialog, messagebox, filedialog
+import json
 
 class MazeDesigner(tk.Tk):
     def __init__(self, grid_rows, grid_cols):
@@ -199,32 +200,41 @@ class MazeDesigner(tk.Tk):
         return hex_string
     
     def export_maze(self):
-        level_name = simpledialog.askstring("Export", "Enter Level Name:", parent=self)
+        # level_name = simpledialog.askstring("Export", "Enter Level Name:", parent=self)
 
-        if level_name is None:
-            return # User cancelled
+        # if level_name is None:
+        #     return # User cancelled
         
-        hex_string = self.get_hex_string()
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Save Maze JSON File"
+        )
 
-        start_col_row = f"({self.start_pos[1]}, {self.start_pos[0]})" if self.start_pos else "None"
-        end_col_row = f"({self.end_pos[1]}, {self.end_pos[0]})" if self.end_pos else "None"
+        if not file_path:
+            return
+        
+        maze_data = {
+            "seed": self.get_hex_string(),
+            "levelStart": None,
+            "levelEnd": None,
+            "fruits": {}
+        }
 
-        fruits_col_row = [(f"({col}, {row})") for row, col in sorted(list(self.fruit_positions))]
+        if self.start_pos:
+            maze_data["levelStart"] = {"x": self.start_pos[1], "y": self.start_pos[0]}
+        if self.end_pos:
+            maze_data["levelEnd"] = {"x": self.end_pos[1], "y": self.end_pos[0]}
+        
+        for i, (row, col) in enumerate(sorted(list(self.fruit_positions))):
+            maze_data["fruits"][f"fr{i+1}"] = {"x": col, "y": row}
 
-        export_string = f"[{level_name}]\n"
-        export_string += f"Seed:\n"
-        export_string += f"{hex_string}\n"
-        export_string += f"Start:\n"
-        export_string += f"{start_col_row}\n"
-        export_string += f"End:\n"
-        export_string += f"{end_col_row}\n"
-        export_string += f"Fruits:\n"
-        export_string += f"{fruits_col_row}\n"
-
-        messagebox.showinfo("Export Successful", "Maze data exported to the console.")
-        print("\n--- Exported Maze Data ---")
-        print(export_string)
-        print("---------------------------\n")
+        try:
+            with open(file_path, 'w') as f:
+                json.dump(maze_data, f, indent=4)
+            messagebox.showinfo("Export Successful", f"Maze data exported to '{file_path}'")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"An error occurred during export: {e}")
     
 if __name__ == "__main__":
     maze_app = MazeDesigner(9, 15)
