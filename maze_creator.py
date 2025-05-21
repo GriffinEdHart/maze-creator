@@ -33,8 +33,17 @@ class MazeDesigner(tk.Tk):
 
         self.bind("<Key>", self.on_key_press)
 
-        export_button = tk.Button(self, text="Export maze", command=self.export_maze)
-        export_button.pack(pady=10)
+        button_frame = tk.Frame(self)
+        button_frame.pack(pady=10)
+
+        export_button = tk.Button(button_frame, text="Export to JSON", command=self.export_to_json)
+        export_button.pack(side=tk.LEFT, padx=5)
+
+        load_button = tk.Button(button_frame, text="Load Maze", command=self.load_maze)
+        load_button.pack(side=tk.LEFT, padx=5)
+
+        reset_button = tk.Button(button_frame, text="Reset Maze", command=self.reset_maze)
+        reset_button.pack(side=tk.LEFT, padx=5)
 
         self.draw_grid()
     
@@ -132,7 +141,18 @@ class MazeDesigner(tk.Tk):
         self.start_cell_right = None
 
     def on_key_press(self, event):
-        row, col = self.get_cell_coords(event)
+        canvas_x = self.canvas.winfo_pointerx() - self.canvas.winfo_rootx()
+        canvas_y = self.canvas.winfo_pointery() - self.canvas.winfo_rooty()
+
+        # Create a dummy event object with canvas_x and canvas_y
+        class DummyEvent:
+            def __init__(self, x, y):
+                self.x = x
+                self.y = y
+        
+        dummy_event = DummyEvent(canvas_x, canvas_y)
+        row, col = self.get_cell_coords(dummy_event)
+
         if 0 <= row < self.grid_rows and 0 <= col < self.grid_cols:
             if event.keysym.upper() == 'S':
                 self.start_pos = (row, col)
@@ -192,14 +212,10 @@ class MazeDesigner(tk.Tk):
         hex_string = ""
         for row in self.grid_data:
             for cell_value in row:
-                hex_value = hex(cell_value)[2:].upper()
-                # if len(hex_value) == 1:
-                #     hex_string += "0" + hex_value
-                # else:
-                hex_string += hex_value
+                hex_string += hex(cell_value)[2:].upper()
         return hex_string
     
-    def export_maze(self):
+    def export_to_json(self):
         # level_name = simpledialog.askstring("Export", "Enter Level Name:", parent=self)
 
         # if level_name is None:
@@ -222,12 +238,12 @@ class MazeDesigner(tk.Tk):
         }
 
         if self.start_pos:
-            maze_data["levelStart"] = {"x": self.start_pos[1], "y": self.start_pos[0]}
+            maze_data["levelStart"] = {"x": self.start_pos[1] + 1, "y": self.start_pos[0] + 1}
         if self.end_pos:
-            maze_data["levelEnd"] = {"x": self.end_pos[1], "y": self.end_pos[0]}
+            maze_data["levelEnd"] = {"x": self.end_pos[1] + 1, "y": self.end_pos[0] + 1}
         
         for i, (row, col) in enumerate(sorted(list(self.fruit_positions))):
-            maze_data["fruits"][f"fr{i+1}"] = {"x": col, "y": row}
+            maze_data["fruits"][f"fr{i+1}"] = {"x": col + 1, "y": row + 1}
 
         try:
             with open(file_path, 'w') as f:
@@ -236,6 +252,78 @@ class MazeDesigner(tk.Tk):
         except Exception as e:
             messagebox.showerror("Export Error", f"An error occurred during export: {e}")
     
+    def load_maze(self):
+
+        file_path = filedialog.askopenfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*")],
+            title="Open Maze JSON File"
+        )
+
+        if not file_path:
+            return
+        
+        try:
+            with open(file_path, 'r') as f:
+                loaded_data = json.load(f)
+
+            # Reset current maze
+            self.grid_data = [[0 for _ in range(self.grid_cols)] for _ in range(self.grid_rows)]
+            self.start_pos = None
+            self.end_pos = None
+            self.fruit_positions = set()
+
+            # Load hex string back into grid_data
+            hex_string = loaded_data.get("seed", "")
+            if len(hex_string) != self.grid_rows * self.grid_cols:
+                raise ValueError("Hex string length does not match expected grid size.")
+
+            cell_idx = 0
+            for r in range(self.grid_rows):
+                for c in range(self.grid_cols):
+                    hex_val = hex_string[cell_idx]
+                    self.grid_data[r][c] = int(hex_val, 16)
+                    cell_idx += 1
+            
+            # Load start position
+            start_data = loaded_data.get("levelStart")
+            if start_data and "x" in start_data and "y" in start_data:
+                self.start_pos = (start_data["y"] - 1, start_data["x"] - 1)
+
+            # Load end position
+            end_data = loaded_data.get("levelEnd")
+            if end_data and "x" in end_data and "y" in end_data:
+                self.end_pos = (end_data["y"] - 1, end_data["x"] - 1)
+            
+            # Load fruits
+            fruits_data = loaded_data.get("fruits", {})
+            for fruit_key, fruit_coords in fruits_data.items():
+                if "x" in fruit_coords and "y" in fruit_coords:
+                    self.fruit_positions.add((fruit_coords["y"] - 1, fruit_coords["x"] - 1)) # (row, col)
+
+            self.draw_grid() # Redraw the grid to show the loaded maze
+            messagebox.showinfo("Load Successful", f"Maze loaded from '{file_path}'")
+
+        except FileNotFoundError:
+            messagebox.showerror("Load Error", "File not found.")
+        except json.JSONDecodeError:
+            messagebox.showerror("Load Error", "Invalid JSON file. Please ensure it's a valid maze JSON.")
+        except ValueError as ve:
+            messagebox.showerror("Load Error", f"Data format error: {ve}")
+        except KeyError as ke:
+            messagebox.showerror("Load Error", f"Missing key in JSON data: {ke}. Please check the file structure.")
+        except Exception as e:
+            messagebox.showerror("Load Error", f"An unexpected error occurred during load: {e}")
+
+    def reset_maze(self):
+        if messagebox.askyesno("Reset Maze", "Are you sure?"):
+            self.grid_data = [[0 for _ in range(self.grid_cols)] for _ in range(self.grid_rows)]
+            self.start_pos = None
+            self.end_pos = None
+            self.fruit_positions.clear()
+            self.draw_grid()
+
+
 if __name__ == "__main__":
     maze_app = MazeDesigner(9, 15)
     maze_app.focus_set()
